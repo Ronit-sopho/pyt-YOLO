@@ -19,8 +19,8 @@ class _residualBlocks_(nn.Module):
         Define the layers here in __init__.
         Connections are defined in forward
 
-        /* Using from : https://github.com/pjreddie/darknet/issues/950  */
-                        padding = (kernel_size-1)//2
+        /* Using 'constant padding' from : https://github.com/pjreddie/darknet/issues/950  */
+        ----------padding = (kernel_size-1)//2
 
 
         """
@@ -30,7 +30,7 @@ class _residualBlocks_(nn.Module):
         self.Lrelu = nn.LeakyReLU(inplace=True)
         self.conv2 = nn.Conv2d(out_channels//2, out_channels, kernel_size=3, stride=stride, padding=1, bias=False)
         self.bn2 = nn.BatchNorm2d(out_channels)
-        self.relu=nn.LeakyReLU(inplace=True)        # Not sure if a new definition here is required
+        self.Lrelu_x=nn.LeakyReLU(inplace=True)        # Not sure if a new definition here is required
 
     def forward(self, x):
         """
@@ -48,15 +48,48 @@ class _residualBlocks_(nn.Module):
         return out
 
 class Darknet53FeatureExtrator(nn.Module):
-    def __init__(self, netsize):
+    def __init__(self, resBlock, netsize):
         """
         Add comments later
         """
         super(Darknet53FeatureExtrator, self).__init__()
-        self.conv1 = nn.Conv2d()
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.Lrelu = nn.LeakyReLU(inplace=True)
+        self.block1 = self._netBlock_(resBlock, 1, 32, 64)
+        self.block2 = self._netBlock_(resBlock, 2, 64, 128)
+        self.block3 = self._netBlock_(resBlock, 8, 128, 256)
+        self.block4 = self._netBlock_(resBlock, 8, 256, 512)
+        self.block5 = self._netBlock_(resBlock, 4, 512, 1024)
 
-    def _netBlock_(numBlocks):
+
+    def _netBlock_(self, resBlock, numBlocks, in_channels, out_channels):
         """
         Add comments later
         """
-        self.
+        conv_down = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1, bias=False)
+        bn_down = nn.BatchNorm2d(out_channels)
+        Lrelu_down = nn.LeakyReLU(inplace=True)
+
+        downsample = nn.Sequential(
+                                    conv_down,
+                                    bn_down,
+                                    Lrelu_down)
+        layers = [downsample]
+        in_channels = out_channels
+        for i in range(numBlocks):
+            layers.append(resBlock(in_channels, out_channels))
+
+        return nn.Sequential(*layers)
+
+    def forward(self, x):
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.Lrelu(out)
+        out = self.block1(out)
+        out = self.block2(out)
+        out = self.block3(out)
+        out = self.block4(out)
+        out = self.block5(out)
+        
+        return out

@@ -54,41 +54,59 @@ class FaceDataset(Dataset):
         img_name = os.path.join(self.image_dir, annot[0]+'.jpg')
         image = Image.open(img_name)
         image = image.convert('RGB')
+
+        # Since arrays with different dimensions cannot be stacked together
+        # along a new dimension, define a fixed size array with zeros
+        # E.g- Array of (1,5) cannot be stacked with (3,5) along a new dimension of batch
+        # Choose a maximum of 15 boxes per image
+        MAX_SIZE = 15
+        BOXES = np.zeros((MAX_SIZE,5))
         boxes = np.array([np.array(list(map(float, box.split(',')))) for box in annot[1:]], dtype=np.int32)
 
-        if self.transform:
-            image = self.transform(image)
 
         if self.new_shape is not None:
             image, boxes = self._resize_(image, boxes)
 
-        return (image, boxes)
+        if self.transform:
+            image = self.transform(image)
+
+        BOXES[:boxes.shape[0]] = boxes
+        sample = {'image':np.asarray(image), 'label':BOXES}
+
+
+        return sample
 
 
 # --------------Test the custom dataset by plotting some images-------------------------
 #---------------Uncomment to plot sample data from the dataset--------------------------
-
+# 
 # annotFile = '../data/annotations.txt'
 # imageDir = '../data/images/originalPics'
 #
-# # trans = transforms.Compose([transforms.Resize((416,416))])
-# dataHolder = FaceDataset(annotFile, imageDir, transform=None, resize=(416,416))
-#
+# trans = transforms.Compose([transforms.ToTensor()])
+# dataset= FaceDataset(annotFile, imageDir, transform=None, resize=(416,416))
+# dataHolder = DataLoader(dataset=dataset, batch_size=4, shuffle=True)
+# plt.style.use('dark_background')
 # fig = plt.figure()
-# for i in range(len(dataHolder)):
-#     sample = dataHolder[i]
-#     img = sample[0]
-#     boxes = sample[1][0]
-#     # print(i, sample['image'].shape, sample['boxes'])
-#     ax = plt.subplot(1, 4, i + 1)
-#     plt.tight_layout()
-#     rect = mpatches.Rectangle((boxes[1]-boxes[3]//2, boxes[2]-boxes[4]//2), boxes[3], boxes[4], edgecolor='r', fill=False)
-#     ax.imshow(img)
-#     ax.add_patch(rect)
-#     ax.set_title('Sample {}'.format(i))
-#     ax.axis('off')
 #
-#     if i == 3:
+# for i,data in enumerate(dataHolder):
+#     bs = data['image'].shape[0]
+#     # print('Batch size: {}'.format(bs))
+#     imgs = data['image']
+#     labels = data['label']
+#     for j in range(bs):
+#         ax = plt.subplot(3, bs, i*bs+(j+1))
+#         plt.tight_layout()
+#         boxes = labels[j]
+#         for box in boxes:
+#             rect = mpatches.Rectangle((box[1]-box[3]//2, box[2]-box[4]//2), box[3], box[4], edgecolor='r', fill=False)
+#             ax.add_patch(rect)
+#         img  = imgs[j]
+#         ax.imshow(img)
+#         ax.set_title('Sample {}'.format(i*bs+(j+1)))
+#         ax.axis('off')
+#
+#     if i == 2:
 #         plt.show()
 #         break
 #----------------------------------------------

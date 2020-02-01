@@ -13,8 +13,70 @@ from matplotlib import pyplot as plt
 import os
 import matplotlib.patches as mpatches
 
+MAX_BOXES = 15
+
+def YoloLabel(labels, input_shape, anchors, num_classes):
+    """
+    Generate ground truth labels from bounding boxes of the images
+     y1,   y2,    y3 are the GT labels for respective grid sizes of
+    h//8, h//16, h//32
+    """
+    net_h, net_w = input_shape
+    masks = np.array([[0,1,2],[3,4,5],[6,7,8]])
+    anchor_areas = [anchor[i]*anchor[i+1] for i in range(0,len(anchors)//2,2)]
+    y1 = torch.zeros(batch_size,net_h//8,net_w//8,3,(num_classes+4+1))
+    y2 = torch.zeros(batch_size,net_h//16,net_w//16,3,(num_classes+4+1))
+    y3 = torch.zeros(batch_size,net_h//32,net_w//32,3,(num_classes+4+1))
+
+    xx1,yy1 = w//8, h//8
+    xx2,yy2 = w//16, h//16
+    xx3,yy3 = w//32, h//32
+
+    grids = {1:(xx1,yy1),2:(xx2,yy2),3:(xx3,yy3)}
+    y_truth = {1:y1,2:y1,3:y3}
+
+    # Continue with loops for now, use broadcasting later on
+    for i in range(batch_size):
+        boxes = labels[i]
+        pos = []
+        for box in boxes:
+            cls,x,y,w,h = box
+            anchor_boxes = [(x-anchor[i]//2,y-anchor[i+1]//2,x+anchor[i]//2,y+anchor[i+1]//2) for i in range(0,len(anchors)//2,2)]
+            IOUs = _iou_((x-w//2,y-h//2,x+w//2,y+h//2), anchor_boxes)
+            pos = np.argwhere(masks==np.argmax(IOUs))
+            r = int(x/net_w*grids[pos[0][0]])
+            c = int(y/net_h*grids[pos[0]][1])
+            y_truth[pos[0]][i][r][c][pos[1]][0:4] = x/net_w, y/net_h, w/net_w, h/net_h
+            y_truth[pos[0]][i][r][c][pos[1]][4] = 1
+            y_truth[pos[0]][i][r][c][pos[1]][5+cls] = 1
+
+    return y_truth
+
+
+    def _iou_(box1, boxes2):
+        b1 = box1
+        ious = []
+        for b2 in boxes2:
+            xmin = max(b1[0],b2[0])
+            xmax = min(b1[2],b2[2])
+            ymin = max(b1[1],b2[1])
+            ymax = min(b1[3],b2[3])
+            intersection_area = (ymax-ymin)*(xmax-xmin)
+            b1_area = (b1[3]-b1[1])*(b1[2]-b1[0])
+            b2_area = (b2[3]-b2[1])*(b2[2]-b2[0])
+            ious.append(intersection_area/(b1_area+b2_area-intersection_area))
+        return ious
+
+
 
 class FaceDataset(Dataset):
+    """
+    Returns a data dictionary:
+    data = {
+        'image': torch tensor of size equal to "resize"
+        'label': (MAX_BOXES,5) #5==id,x,y,w,h
+    }
+    """
 
     def __init__(self, annot_file, image_dir, transform=None, resize=None):
         """
@@ -59,8 +121,7 @@ class FaceDataset(Dataset):
         # along a new dimension, define a fixed size array with zeros
         # E.g- Array of (1,5) cannot be stacked with (3,5) along a new dimension of batch
         # Choose a maximum of 15 boxes per image
-        MAX_SIZE = 15
-        BOXES = np.zeros((MAX_SIZE,5))
+        BOXES = np.zeros((MAX_BOXES,5))
         boxes = np.array([np.array(list(map(float, box.split(',')))) for box in annot[1:]], dtype=np.int32)
 
 
@@ -79,7 +140,7 @@ class FaceDataset(Dataset):
 
 # --------------Test the custom dataset by plotting some images-------------------------
 #---------------Uncomment to plot sample data from the dataset--------------------------
-# 
+#
 # annotFile = '../data/annotations.txt'
 # imageDir = '../data/images/originalPics'
 #

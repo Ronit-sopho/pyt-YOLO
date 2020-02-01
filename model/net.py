@@ -204,10 +204,11 @@ class Yolov3Loss():
 
     def processGT(self, y_truth, anchors):
         """
-        YOLO annotations are as followss:
-        class_id, x, y, w, h
-        x,y,w,h belong in range (0,1]
-        x,y==>co-ordinates of the centre
+        Annotations for the FaceDataset are:
+        class_id, x, y, w, h (absolute values)
+        x,y : co-ordinates of the centre
+        y_truth = (batch_size, MAX_BOXES, 5)
+        y_truth_yolo : (batch_size , MAX_BOXES , (num_anchors/3*(num_classes+5)))
         """
         GT = {}
         for i in range(self.n_scales):

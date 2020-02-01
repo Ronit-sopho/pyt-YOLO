@@ -15,44 +15,14 @@ import matplotlib.patches as mpatches
 
 MAX_BOXES = 15
 
-def YoloLabel(labels, input_shape, anchors, num_classes):
+def YoloLabel(labels, input_shape, anchor, num_classes):
     """
+    Current implementation is really slow :(
+
     Generate ground truth labels from bounding boxes of the images
      y1,   y2,    y3 are the GT labels for respective grid sizes of
     h//8, h//16, h//32
     """
-    net_h, net_w = input_shape
-    masks = np.array([[0,1,2],[3,4,5],[6,7,8]])
-    anchor_areas = [anchor[i]*anchor[i+1] for i in range(0,len(anchors)//2,2)]
-    y1 = torch.zeros(batch_size,net_h//8,net_w//8,3,(num_classes+4+1))
-    y2 = torch.zeros(batch_size,net_h//16,net_w//16,3,(num_classes+4+1))
-    y3 = torch.zeros(batch_size,net_h//32,net_w//32,3,(num_classes+4+1))
-
-    xx1,yy1 = w//8, h//8
-    xx2,yy2 = w//16, h//16
-    xx3,yy3 = w//32, h//32
-
-    grids = {1:(xx1,yy1),2:(xx2,yy2),3:(xx3,yy3)}
-    y_truth = {1:y1,2:y1,3:y3}
-
-    # Continue with loops for now, use broadcasting later on
-    for i in range(batch_size):
-        boxes = labels[i]
-        pos = []
-        for box in boxes:
-            cls,x,y,w,h = box
-            anchor_boxes = [(x-anchor[i]//2,y-anchor[i+1]//2,x+anchor[i]//2,y+anchor[i+1]//2) for i in range(0,len(anchors)//2,2)]
-            IOUs = _iou_((x-w//2,y-h//2,x+w//2,y+h//2), anchor_boxes)
-            pos = np.argwhere(masks==np.argmax(IOUs))
-            r = int(x/net_w*grids[pos[0][0]])
-            c = int(y/net_h*grids[pos[0]][1])
-            y_truth[pos[0]][i][r][c][pos[1]][0:4] = x/net_w, y/net_h, w/net_w, h/net_h
-            y_truth[pos[0]][i][r][c][pos[1]][4] = 1
-            y_truth[pos[0]][i][r][c][pos[1]][5+cls] = 1
-
-    return y_truth
-
-
     def _iou_(box1, boxes2):
         b1 = box1
         ious = []
@@ -67,6 +37,38 @@ def YoloLabel(labels, input_shape, anchors, num_classes):
             ious.append(intersection_area/(b1_area+b2_area-intersection_area))
         return ious
 
+    net_h, net_w = input_shape
+    masks = np.array([[0,1,2],[3,4,5],[6,7,8]])
+    batch_size=1
+    y1 = torch.zeros(batch_size,net_h//8,net_w//8,3,(num_classes+4+1))
+    y2 = torch.zeros(batch_size,net_h//16,net_w//16,3,(num_classes+4+1))
+    y3 = torch.zeros(batch_size,net_h//32,net_w//32,3,(num_classes+4+1))
+
+    xx1,yy1 = net_w//8, net_h//8
+    xx2,yy2 = net_w//16, net_h//16
+    xx3,yy3 = net_w//32, net_h//32
+
+    grids = {0:(xx1,yy1),1:(xx2,yy2),2:(xx3,yy3)}
+    y_truth = {0:y1,1:y1,2:y3}
+
+    # Continue with loops for now, use broadcasting later on
+    for i in range(batch_size):
+        boxes = labels[i]
+        pos = []
+        for box in boxes:
+            cls,x,y,w,h = box
+            if w*h!=0:
+                anchor_boxes = [(x-anchor[i]//2,y-anchor[i+1]//2,x+anchor[i]//2,y+anchor[i+1]//2) for i in range(0,len(anchors)//2,2)]
+                IOUs = _iou_((x-w//2,y-h//2,x+w//2,y+h//2), anchor_boxes)
+                pos = np.argwhere(masks==np.argmax(IOUs))
+                r = int(x/net_w * grids[pos[0,0]][0])
+                c = int(y/net_h * grids[pos[0,1]][1])
+                print(r,c)
+                y_truth[pos[0,0]][i][r][c][pos[0,1]][0:4] = torch.tensor([x/net_w, y/net_h, w/net_w, h/net_h])
+                y_truth[pos[0,0]][i][r][c][pos[0,1]][4] = 1
+                y_truth[pos[0,0]][i][r][c][pos[0,1]][5+int(cls)] = 1
+
+    return y_truth
 
 
 class FaceDataset(Dataset):
@@ -75,7 +77,7 @@ class FaceDataset(Dataset):
     data = {
         'image': torch tensor of size equal to "resize"
         'label': (MAX_BOXES,5) #5==id,x,y,w,h
-    }
+        }
     """
 
     def __init__(self, annot_file, image_dir, transform=None, resize=None):
@@ -140,13 +142,14 @@ class FaceDataset(Dataset):
 
 # --------------Test the custom dataset by plotting some images-------------------------
 #---------------Uncomment to plot sample data from the dataset--------------------------
-#
+# 
 # annotFile = '../data/annotations.txt'
 # imageDir = '../data/images/originalPics'
+# anchors = [10,13, 16,30, 33,23, 30,61, 62,45, 59,119, 116,90, 156,198, 373,326]
 #
 # trans = transforms.Compose([transforms.ToTensor()])
 # dataset= FaceDataset(annotFile, imageDir, transform=None, resize=(416,416))
-# dataHolder = DataLoader(dataset=dataset, batch_size=4, shuffle=True)
+# dataHolder = DataLoader(dataset=dataset, batch_size=1, shuffle=True)
 # plt.style.use('dark_background')
 # fig = plt.figure()
 #
@@ -155,6 +158,7 @@ class FaceDataset(Dataset):
 #     # print('Batch size: {}'.format(bs))
 #     imgs = data['image']
 #     labels = data['label']
+#     yoloBoxes = YoloLabel(labels, (416,416), anchors, 1)
 #     for j in range(bs):
 #         ax = plt.subplot(3, bs, i*bs+(j+1))
 #         plt.tight_layout()
@@ -166,8 +170,9 @@ class FaceDataset(Dataset):
 #         ax.imshow(img)
 #         ax.set_title('Sample {}'.format(i*bs+(j+1)))
 #         ax.axis('off')
-#
-#     if i == 2:
+#     print(yoloBoxes[0].nonzero())
+#     print(yoloBoxes[0].sum())
+#     if i == 0:
 #         plt.show()
 #         break
 #----------------------------------------------

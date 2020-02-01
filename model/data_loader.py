@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader, Dataset
 from PIL import Image
 from torchvision import transforms, utils
 from matplotlib import pyplot as plt
-import os
+import os, time
 import matplotlib.patches as mpatches
 
 MAX_BOXES = 15
@@ -63,7 +63,6 @@ def YoloLabel(labels, input_shape, anchor, num_classes):
                 pos = np.argwhere(masks==np.argmax(IOUs))
                 r = int(x/net_w * grids[pos[0,0]][0])
                 c = int(y/net_h * grids[pos[0,1]][1])
-                print(r,c)
                 y_truth[pos[0,0]][i][r][c][pos[0,1]][0:4] = torch.tensor([x/net_w, y/net_h, w/net_w, h/net_h])
                 y_truth[pos[0,0]][i][r][c][pos[0,1]][4] = 1
                 y_truth[pos[0,0]][i][r][c][pos[0,1]][5+int(cls)] = 1
@@ -142,37 +141,41 @@ class FaceDataset(Dataset):
 
 # --------------Test the custom dataset by plotting some images-------------------------
 #---------------Uncomment to plot sample data from the dataset--------------------------
-# 
-# annotFile = '../data/annotations.txt'
-# imageDir = '../data/images/originalPics'
-# anchors = [10,13, 16,30, 33,23, 30,61, 62,45, 59,119, 116,90, 156,198, 373,326]
 #
-# trans = transforms.Compose([transforms.ToTensor()])
-# dataset= FaceDataset(annotFile, imageDir, transform=None, resize=(416,416))
-# dataHolder = DataLoader(dataset=dataset, batch_size=1, shuffle=True)
-# plt.style.use('dark_background')
-# fig = plt.figure()
-#
-# for i,data in enumerate(dataHolder):
-#     bs = data['image'].shape[0]
-#     # print('Batch size: {}'.format(bs))
-#     imgs = data['image']
-#     labels = data['label']
-#     yoloBoxes = YoloLabel(labels, (416,416), anchors, 1)
-#     for j in range(bs):
-#         ax = plt.subplot(3, bs, i*bs+(j+1))
-#         plt.tight_layout()
-#         boxes = labels[j]
-#         for box in boxes:
-#             rect = mpatches.Rectangle((box[1]-box[3]//2, box[2]-box[4]//2), box[3], box[4], edgecolor='r', fill=False)
-#             ax.add_patch(rect)
-#         img  = imgs[j]
-#         ax.imshow(img)
-#         ax.set_title('Sample {}'.format(i*bs+(j+1)))
-#         ax.axis('off')
-#     print(yoloBoxes[0].nonzero())
-#     print(yoloBoxes[0].sum())
-#     if i == 0:
-#         plt.show()
-#         break
+annotFile = '../data/annotations.txt'
+imageDir = '../data/images/originalPics'
+anchors = [10,13, 16,30, 33,23, 30,61, 62,45, 59,119, 116,90, 156,198, 373,326]
+
+trans = transforms.Compose([transforms.ToTensor()])
+start = time.time()
+dataset= FaceDataset(annotFile, imageDir, transform=None, resize=(416,416))
+dataHolder = DataLoader(dataset=dataset, batch_size=1, shuffle=True)
+end = time.time()
+print('Time taken for loading dataset: ',end-start)
+plt.style.use('dark_background')
+fig = plt.figure()
+
+for i,data in enumerate(dataHolder):
+    bs = data['image'].shape[0]
+    # print('Batch size: {}'.format(bs))
+    imgs = data['image']
+    labels = data['label']
+    start = time.time()
+    yoloBoxes = YoloLabel(labels, (416,416), anchors, 1)
+    end = time.time()
+    print('Time taken for conversion: ', end-start)
+    for j in range(bs):
+        ax = plt.subplot(3, bs, i*bs+(j+1))
+        plt.tight_layout()
+        boxes = labels[j]
+        for box in boxes:
+            rect = mpatches.Rectangle((box[1]-box[3]//2, box[2]-box[4]//2), box[3], box[4], edgecolor='r', fill=False)
+            ax.add_patch(rect)
+        img  = imgs[j]
+        ax.imshow(img)
+        ax.set_title('Sample {}'.format(i*bs+(j+1)))
+        ax.axis('off')
+    if i == 0:
+        plt.show()
+        break
 #----------------------------------------------

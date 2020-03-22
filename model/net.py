@@ -13,7 +13,7 @@ import torch.nn.functional as F
 from torchviz import make_dot
 import torch
 import numpy as np
-
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 class _residualBlocks_(nn.Module):
     """
@@ -194,19 +194,19 @@ class YOLOv3Net(nn.Module):
 # print(y_out[0].shape,y_out[1].shape,y_out[2].shape)
 #---------------------------------------------------------------------------
 
-class Yolov3Loss():
+class Yolov3Loss(nn.Module):
     def __init__(self, anchors, num_classes, input_size):
         """
         Yolo divides an image into grid cells.
         Network output at different scales requires different grid sizes
         """
-        self.anchors = anchors
+        self.anchors = np.array(anchors)
         self.num_anchors = len(anchors)
         self.n_scales = self.num_anchors//6
         self.h, self.w = input_size
         self.mask = [[0,1,2], [3,4,5], [6,7,8]]
         self.scaling_factors = [8,16,32]
-        self.grid_sizes = [h//scaling_factors[x] for x in range(n_scales)]
+        self.grid_sizes = [self.h//self.scaling_factors[x] for x in range(self.n_scales)]
         self.ignore_threshold = 0.5
         self.truth_threshold = 0.7
 
@@ -229,14 +229,30 @@ class Yolov3Loss():
         anchors = self.anchors.reshape(-1,2)
         # out = out.view(b,gy,gx,3,-1)
         out = yolo_output.view(b,gy,gx,3,-1)
+        # print("out shape: ", out.dtype)
         xx, yy = np.meshgrid(np.arange(gx), np.arange(gy))
-        out[...,0]+=torch.tensor(xx, dtype=out.dtype)
+        xx = torch.from_numpy(xx).to(device)
+        yy = torch.from_numpy(yy).to(device)
+        xx = xx.view(1,xx.shape[0],xx.shape[1],1)
+        yy = yy.view(1,yy.shape[0],yy.shape[1],1)
+        xx = xx.repeat(b,1,1,out.shape[-2])
+        yy = yy.repeat(b,1,1,out.shape[-2])
+        # print("xx shape: ", xx.shape)
+        # print(out.dtype)
+        # out[...,0]+=torch.tensor(xx, dtype=out.dtype)
+        out[...,0]+=xx.float()
         out[...,0]/=w
-        out[...,1]+=torch.tensor(yy, dtype=out.dtype)
+        # out[...,1]+=torch.tensor(yy, dtype=out.dtype)
+        out[...,1]+=yy.float()
         out[...,1]/=h
+        out = out.to('cpu')
+        out = out.detach().numpy()
         for i,prior in enumerate(anchors[mask]):
             out[...,i,2] = np.exp(out[...,i,2])*prior[0]/w
             out[...,i,3] = np.exp(out[...,i,3])*prior[1]/h
+        out = torch.from_numpy(out).double().to(device)
+        # print("out dtype: ", out[1,1,1,1,:])
+        # print('out grad find', out.requires_grad)
         return out
 
     def loss(self, y_out, y_truth):
@@ -249,19 +265,28 @@ class Yolov3Loss():
 
             return mat.shape = (b,gy,gx,3,num_gt_boxes)
             """
-            mat2.unsqueeze_(4) # Add dimension at axis 4
+            mat2 = mat2.unsqueeze(4) # Add dimension at axis 4
+            # print("Mat 1 shape:", mat1[0,0,0,0,:])
+            # print("Mat 2 shape: ",mat2[0,0,0,0,:])
 
-            xtl1 = mat1[...,:,0] - mat1[...,:,2]//2
-            ytl1 = mat1[...,:,1] - mat1[...,:,3]//2
-            xbr1 = mat1[...,:,0] + mat1[...,:,2]//2
-            ybr1 = mat1[...,:,1] + mat1[...,:,3]//2
+            xtl1 = mat1[...,:,0] - mat1[...,:,2]/2
+            ytl1 = mat1[...,:,1] - mat1[...,:,3]/2
+            xbr1 = mat1[...,:,0] + mat1[...,:,2]/2
+            ybr1 = mat1[...,:,1] + mat1[...,:,3]/2
 
-            xtl2 = mat2[...,:,0] - mat2[...,:,2]//2
-            ytl2 = mat2[...,:,1] - mat2[...,:,3]//2
-            xbr2 = mat2[...,:,0] + mat2[...,:,2]//2
-            ybr2 = mat2[...,:,1] + mat2[...,:,3]//2
+            xtl2 = mat2[...,:,0] - mat2[...,:,2]/2
+            ytl2 = mat2[...,:,1] - mat2[...,:,3]/2
+            xbr2 = mat2[...,:,0] + mat2[...,:,2]/2
+            ybr2 = mat2[...,:,1] + mat2[...,:,3]/2
 
+            # print("diff: ", mat2[...,:,0] - mat2[...,:,2]/2)
+
+            # print("mat2 vals: ", mat2[...,:,0])
+            # print("mat2 vals: ", mat2[...,:,2])
+            # print("xtl2 type: ", xtl2)
+            # print("xbr2 type: ", xbr2[0,0,0,:,:])
             union_areas = (xbr1-xtl1)*(ybr1-ytl1) + (xbr2-xtl2)*(ybr2-ytl2)
+            # print("Union_areas shape: ", union_areas)
 
             xmin_mask = xtl1[...,:]>xtl2[...,:]
             ymin_mask = ytl1[...,:]>ytl2[...,:]
@@ -274,7 +299,7 @@ class Yolov3Loss():
             ybr1[ymax_mask==0] = ybr1[ymax_mask==0] - (ybr1[...,:]-ybr2[...,:])[ymax_mask==0]
 
             intersection_areas = (xbr1-xtl1)*(ybr1-ytl1)
-            print(intersection_areas.shape)
+            # print(intersection_areas.shape)
 
             return intersection_areas/(union_areas-intersection_areas)
 
@@ -282,24 +307,33 @@ class Yolov3Loss():
         # y1, y2, y3 = [y_out[i] for i in range(3)]
         # y1_t, y2_t, y3_t = [y_truth[i] for i in range(3)]
         loss = 0
-        xy_loss = 0
-        wh_loss = 0
-        objectness_loss = 0
-        cls_loss = 0
 
         for i in range(len(y_out)):
-            y_out_ = self.processYoloOutput(y_out[i], i) # y_out_ shape = (b,gy,gx,3,5+num_cls)
+
+            y_out_ = self.processYoloOutput(y_out[i], i).requires_grad_(True) # y_out_ shape = (b,gy,gx,3,5+num_cls)
+            # print('yout grad: ', y_out_.requires_grad)
             b,gy,gx,_,_ = y_out_.shape
-            y_truth_ = y_truth[i]
+            y_truth_ = y_truth[i].to(device)
+            # print(y_truth_.device)
+            # print('This is i', i)
+            # print('Tu tu ru...', y_truth_.shape)
             # take ground truth boxes of every anchor boxes in that scale
             # this slicing wont work with torch :(
             # Sry, it will work :)
-            gtboxes = y_truth_[y_truth_[...,:,4]==1][...,:4] #gtboxes shape = (num_gt_boxes, 4)
+            gt = []
+            for k in range(3):
+                gt.append(y_truth[k][y_truth[k][...,:,4]==1][...,:4])
+                # gtboxes = y_truth_[y_truth_[...,:,4]==1][...,:4] #gtboxes shape = (num_gt_boxes, 4)
+            gtboxes = torch.cat(gt)
+            gtboxes = gtboxes.to(device)
+            # print(gtboxes.device)
             gtboxes_ = gtboxes.view(1,1,1,1,gtboxes.shape[0],gtboxes.shape[1]) #shape now = (1,1,1,1,num_gt_boxes,4)
             gtboxes_ = gtboxes_.repeat(b,gy,gx,3,1,1) #shape now = (b,gy,gx,3,num_gt_boxes,4)
-            biou = boxIOU(gtboxes_, y_out_) # biou shape : (b,gy, gx, 3, num_gt_boxes)
-            assign_mask = torch.zeros(b,gy,gx,3)
+            biou = boxIOU(gtboxes_.double(), y_out_.double()) # biou shape : (b,gy, gx, 3, num_gt_boxes)
+            assign_mask = torch.zeros(b,gy,gx,3).to(device)
+            # print("BIOU shape: ", biou.shape)
             for j in range(gtboxes.shape[0]):
+                # print(biou[...,j].max())
                 assign_mask[biou[...,j]==biou[...,j].max()]=1
 
 
@@ -310,10 +344,21 @@ class Yolov3Loss():
             box_loss_scale = 2-y_truth_[...,2]*y_truth_[...,3] 
 
             #This could be wrong, will check later
-            xy_loss = ((y_truth_[...,:2] - y_out_[...,:2])**2)*assign_mask*box_loss_scale
-            wh_loss = ((y_truth_[...,2:4] - y_out_[...,2:4])**2)*assign_mask*box_loss_scale*0.5
-            objectness_loss = object_mask*F.binary_cross_entropy(y_out_[...,4], object_mask) + (1-assign_mask)*(1-object_mask)*F.binary_cross_entropy(y_out_[...,4], object_mask)
-            cls_loss = object_mask*F.binary_cross_entropy(y_out_[...,5:], y_truth_[...,5:])
+            # print('ytruth shape: ', y_truth_[...,:2].shape)
+            # print('yout shape: ', y_out_[...,:2].shape)
+            # print('assign shape: ', assign_mask.shape)
+            # print('boxloss shape: ', box_loss_scale.shape)
+            # print(assign_mask.dtype)
+            assign_mask = assign_mask.double()
+            box_loss_scale = box_loss_scale.double()
+            y_truth_ = y_truth_.double()
+            y_out_ = y_out_.double()
+            object_mask = object_mask.double()
+        # print(y_out_[...,4])
+            xy_loss = ((y_truth_[...,:2]- y_out_[...,:2])**2)*assign_mask.unsqueeze(-1)*box_loss_scale.unsqueeze(-1)
+            wh_loss = ((y_truth_[...,2:4] - y_out_[...,2:4])**2)*assign_mask.unsqueeze(-1)*box_loss_scale.unsqueeze(-1)*0.5
+            objectness_loss = object_mask*F.binary_cross_entropy_with_logits(y_out_[...,4], object_mask) + (1-assign_mask)*(1-object_mask)*F.binary_cross_entropy_with_logits(y_out_[...,4], object_mask)
+            cls_loss = object_mask*F.binary_cross_entropy_with_logits(y_out_[...,5:], y_truth_[...,5:])
 
             xy_loss = xy_loss.sum()/b
             wh_loss = wh_loss.sum()/b
@@ -321,5 +366,6 @@ class Yolov3Loss():
             cls_loss = cls_loss.sum()/b
 
             loss+=xy_loss+wh_loss+objectness_loss+cls_loss
+        # print('loss grad check:',loss, loss.requires_grad)
 
         return loss

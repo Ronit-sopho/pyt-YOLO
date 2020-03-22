@@ -13,7 +13,7 @@ from matplotlib import pyplot as plt
 import os, time
 import matplotlib.patches as mpatches
 
-MAX_BOXES = 15
+MAX_BOXES = 30
 
 def YoloLabel(labels, input_shape, anchors, num_classes):
     """
@@ -45,7 +45,7 @@ def YoloLabel(labels, input_shape, anchors, num_classes):
 
     net_h, net_w = input_shape
     masks = np.array([[0,1,2],[3,4,5],[6,7,8]])
-    batch_size=32   # Reminder -------> Read it from data
+    batch_size=2   # Reminder -------> Read it from data
     y1 = torch.zeros(batch_size,net_h//8,net_w//8,3,(num_classes+4+1))
     y2 = torch.zeros(batch_size,net_h//16,net_w//16,3,(num_classes+4+1))
     y3 = torch.zeros(batch_size,net_h//32,net_w//32,3,(num_classes+4+1))
@@ -55,7 +55,7 @@ def YoloLabel(labels, input_shape, anchors, num_classes):
     xx3,yy3 = net_w//32, net_h//32
 
     grids = {0:(xx1,yy1),1:(xx2,yy2),2:(xx3,yy3)}
-    y_truth = {0:y1,1:y1,2:y3}
+    y_truth = {0:y1,1:y2,2:y3}
 
     # Continue with loops for now, use broadcasting later on
     for i in range(batch_size):

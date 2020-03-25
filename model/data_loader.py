@@ -15,7 +15,7 @@ import matplotlib.patches as mpatches
 
 MAX_BOXES = 30
 
-def YoloLabel(labels, input_shape, anchors, num_classes):
+def YoloLabel(labels, input_shape, anchors, num_classes, batch_size):
     """
     Current implementation is really slow :(
 
@@ -45,7 +45,7 @@ def YoloLabel(labels, input_shape, anchors, num_classes):
 
     net_h, net_w = input_shape
     masks = np.array([[0,1,2],[3,4,5],[6,7,8]])
-    batch_size=2   # Reminder -------> Read it from data
+    batch_size=batch_size   # Reminder -------> Read it from data
     y1 = torch.zeros(batch_size,net_h//8,net_w//8,3,(num_classes+4+1))
     y2 = torch.zeros(batch_size,net_h//16,net_w//16,3,(num_classes+4+1))
     y3 = torch.zeros(batch_size,net_h//32,net_w//32,3,(num_classes+4+1))
@@ -58,7 +58,7 @@ def YoloLabel(labels, input_shape, anchors, num_classes):
     y_truth = {0:y1,1:y2,2:y3}
 
     # Continue with loops for now, use broadcasting later on
-    for i in range(batch_size):
+    for i in range(len(labels)):
         boxes = labels[i]
         pos = []
         for box in boxes:
@@ -70,6 +70,10 @@ def YoloLabel(labels, input_shape, anchors, num_classes):
                 pos = np.argwhere(masks==np.argmax(IOUs))
                 r = int(xb/net_w * grids[pos[0,0]][0])
                 c = int(yb/net_h * grids[pos[0,0]][1])
+                if r==grids[pos[0,0]][0]:
+                    r-=1
+                if c==grids[pos[0,0]][1]:
+                    c-=1
                 y_truth[pos[0,0]][i][r][c][pos[0,1]][0:4] = torch.tensor([xb/net_w, yb/net_h, w/net_w, h/net_h])
                 y_truth[pos[0,0]][i][r][c][pos[0,1]][4] = 1
                 y_truth[pos[0,0]][i][r][c][pos[0,1]][5+int(cls)] = 1
@@ -128,7 +132,7 @@ class FaceDataset(Dataset):
         # Since arrays with different dimensions cannot be stacked together
         # along a new dimension, define a fixed size array with zeros
         # E.g- Array of (1,5) cannot be stacked with (3,5) along a new dimension of batch
-        # Choose a maximum of 15 boxes per image
+        # Choose a maximum of 30 boxes per image
         BOXES = np.zeros((MAX_BOXES,5))
         boxes = np.array([np.array(list(map(float, box.split(',')))) for box in annot[1:]], dtype=np.int32)
 

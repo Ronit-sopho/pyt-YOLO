@@ -6,7 +6,7 @@ Also handling data
 
 import numpy as np
 import os
-
+from sklearn.cluster import KMeans
 
 class FDDBDataset():
     """
@@ -65,5 +65,34 @@ class FDDBDataset():
 
 
 
-dataset = FDDBDataset()
-dataset.readEllipsefiles()
+class KnnAnchors():
+
+    def __init__(self, path_annots, num_anchors):
+        self.annot_file = path_annots
+        self.num_anchors = num_anchors
+
+    def read_annots(self):
+        boxes_wh = []
+        with open(self.annot_file, 'r') as f:
+            for line in f:
+                annotation = line.rstrip().split()
+                for box in annotation[1:]:
+                    boxes_wh.append(np.array(list(map(float, box.split(',')))[-2:]))
+        return np.array(boxes_wh)
+
+    def kmeans_clustering(self):
+        boxes_wh = self.read_annots()
+        kmeans = KMeans(n_clusters=self.num_anchors, random_state=0).fit(boxes_wh)
+        return kmeans.cluster_centers_
+
+# Uncomment for generating YOLO annotation file (run once)
+# dataset = FDDBDataset()
+# dataset.readEllipsefiles()
+
+# Uncomment for running KMeans Clustering
+# path_to_annot_file = './data/annotations.txt'
+# num_anchors = 9 # for yolo v3
+# knn = KnnAnchors(path_to_annot_file, num_anchors)
+# anchors = knn.kmeans_clustering()
+# anchors = sorted(anchors, key=lambda x:max(x[0],x[1]))
+# print(list(anchors))

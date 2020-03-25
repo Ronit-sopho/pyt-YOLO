@@ -250,7 +250,7 @@ class Yolov3Loss(nn.Module):
         for i,prior in enumerate(anchors[mask]):
             out[...,i,2] = np.exp(out[...,i,2])*prior[0]/w
             out[...,i,3] = np.exp(out[...,i,3])*prior[1]/h
-        out = torch.from_numpy(out).double().to(device)
+        out = torch.from_numpy(out).to(device)
         # print("out dtype: ", out[1,1,1,1,:])
         # print('out grad find', out.requires_grad)
         return out
@@ -329,7 +329,7 @@ class Yolov3Loss(nn.Module):
             # print(gtboxes.device)
             gtboxes_ = gtboxes.view(1,1,1,1,gtboxes.shape[0],gtboxes.shape[1]) #shape now = (1,1,1,1,num_gt_boxes,4)
             gtboxes_ = gtboxes_.repeat(b,gy,gx,3,1,1) #shape now = (b,gy,gx,3,num_gt_boxes,4)
-            biou = boxIOU(gtboxes_.double(), y_out_.double()) # biou shape : (b,gy, gx, 3, num_gt_boxes)
+            biou = boxIOU(gtboxes_, y_out_) # biou shape : (b,gy, gx, 3, num_gt_boxes)
             assign_mask = torch.zeros(b,gy,gx,3).to(device)
             # print("BIOU shape: ", biou.shape)
             for j in range(gtboxes.shape[0]):
@@ -349,11 +349,11 @@ class Yolov3Loss(nn.Module):
             # print('assign shape: ', assign_mask.shape)
             # print('boxloss shape: ', box_loss_scale.shape)
             # print(assign_mask.dtype)
-            assign_mask = assign_mask.double()
-            box_loss_scale = box_loss_scale.double()
-            y_truth_ = y_truth_.double()
-            y_out_ = y_out_.double()
-            object_mask = object_mask.double()
+            assign_mask = assign_mask
+            box_loss_scale = box_loss_scale
+            y_truth_ = y_truth_
+            y_out_ = y_out_
+            object_mask = object_mask
         # print(y_out_[...,4])
             xy_loss = ((y_truth_[...,:2]- y_out_[...,:2])**2)*assign_mask.unsqueeze(-1)*box_loss_scale.unsqueeze(-1)
             wh_loss = ((y_truth_[...,2:4] - y_out_[...,2:4])**2)*assign_mask.unsqueeze(-1)*box_loss_scale.unsqueeze(-1)*0.5

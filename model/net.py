@@ -35,12 +35,12 @@ class _residualBlocks_(nn.Module):
     """
     def __init__(self, in_channels, out_channels, stride=1, padding=1):
         """
-        Implementation inspired from:
+        Implementation from:
         https://github.com/yunjey/pytorch-tutorial/blob/master/tutorials/02-intermediate/deep_residual_network/main.py
         """
         super(_residualBlocks_, self).__init__()
         self.conv1 = nn.Conv2d(in_channels, out_channels//2, kernel_size=1, stride=stride, padding=0, bias=False)
-        self.bn1 = nn.BatchNorm2d(out_channels//2)
+        self.bn1 = nn.BatchNorm2d(out_channels//2, affine=True, eps=1e-05, momentum=0.1)
         self.Lrelu = nn.LeakyReLU(inplace=True)
         self.conv2 = nn.Conv2d(out_channels//2, out_channels, kernel_size=3, stride=stride, padding=1, bias=False)
         self.bn2 = nn.BatchNorm2d(out_channels)
@@ -229,9 +229,12 @@ class Yolov3Loss(nn.Module):
         anchors = self.anchors.reshape(-1,2)
         # out = out.view(b,gy,gx,3,-1)
         out = yolo_output.view(b,gy,gx,3,-1)
-        # print("out shape: ", out.dtype)
+        # print("out shape: ", out.shape)
+        # print(out)
         xx, yy = np.meshgrid(np.arange(gx), np.arange(gy))
         xx = torch.from_numpy(xx).to(device)
+        # xx = xx*(w/gx)
+        # yy = yy*(h/gy)
         yy = torch.from_numpy(yy).to(device)
         xx = xx.view(1,xx.shape[0],xx.shape[1],1)
         yy = yy.view(1,yy.shape[0],yy.shape[1],1)
@@ -240,17 +243,28 @@ class Yolov3Loss(nn.Module):
         # print("xx shape: ", xx.shape)
         # print(out.dtype)
         # out[...,0]+=torch.tensor(xx, dtype=out.dtype)
+        out[...,4] = torch.sigmoid(out[...,4])
+        # print(out[...,4])
+        out[...,5:] = torch.sigmoid(out[...,5:])
+
+        out[...,0] = torch.sigmoid(out[...,0])
         out[...,0]+=xx.float()
-        out[...,0]/=w
+        out[...,0]/=gx
         # out[...,1]+=torch.tensor(yy, dtype=out.dtype)
+        out[...,1] = torch.sigmoid(out[...,1])
         out[...,1]+=yy.float()
-        out[...,1]/=h
-        out = out.to('cpu')
-        out = out.detach().numpy()
+        out[...,1]/=gy
+
         for i,prior in enumerate(anchors[mask]):
-            out[...,i,2] = np.exp(out[...,i,2])*prior[0]/w
-            out[...,i,3] = np.exp(out[...,i,3])*prior[1]/h
-        out = torch.from_numpy(out).to(device)
+            out[...,i,2] = torch.exp(out[...,i,2])*prior[0]/w
+            out[...,i,3] = torch.exp(out[...,i,3])*prior[1]/h
+
+        # out = out.to('cpu')
+        # out = out.detach().numpy()
+        # for i,prior in enumerate(anchors[mask]):
+        #     out[...,i,2] = np.exp(out[...,i,2])*prior[0]/w
+        #     out[...,i,3] = np.exp(out[...,i,3])*prior[1]/h
+        # out = torch.from_numpy(out).to(device)
         # print("out dtype: ", out[1,1,1,1,:])
         # print('out grad find', out.requires_grad)
         return out

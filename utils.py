@@ -1,98 +1,73 @@
-"""
-Utility functions for handling hyperparams/logging/storing model
-
-Also handling data
-"""
-
 import numpy as np
-import os
-from sklearn.cluster import KMeans
+import torch
+from torchvision import transforms
+from PIL import Image
+from model.data_loader import letterbox_image
 
-class FDDBDataset():
-    """
-    Convert Annotations of FDDB face dataset to be compatible with YOLO
-    ====> Convert elliptical bounding boxes to rectangular
-    ====> Generate single annotation file
-    """
-
-    def __init__(self):
-        self.annot_dir = './data/FDDB-folds'
-
-    def readEllipsefiles(self):
-        self.annot_write =  open('./data/annotations.txt','a')
-        self.annot_dir_list = sorted(os.listdir(self.annot_dir))
-        self.annot_dir_ellipse_list = [f for f in self.annot_dir_list if "ellipseList" in f]
-        for file in self.annot_dir_ellipse_list:
-            f_struct = ['path', 'n', 'nlines']
-            ptr = 0
-            with open(os.path.join(self.annot_dir,file), 'r') as f:
-                for line in f:
-                    if ptr==0:
-                        holder = ""
-                        holder+=line.rstrip()
-                        ptr=1
-                    elif ptr==1:
-                        count=0
-                        n = int(line)
-                        ptr=2
-                    elif ptr==2:
-                        l = self.ellipse2rect(line.rstrip())
-                        if count<n-1:
-                            holder = holder + " " + l
-                            count+=1
-                        elif count==n-1:
-                            ptr=0
-                            holder = holder + " " + l + '\n'
-                            self.annot_write.write(holder)
-        self.annot_write.close()
-
-    def ellipse2rect(self, components):
-        """
-        For conversion refer to:
-        https://math.stackexchange.com/questions/91132/how-to-get-the-limits-of-rotated-ellipse
-
-        return string in yolo annotation format ===> class_id, centre_x, centre_y, width, height
-        """
-        # The last one in labels contains additional space
-        major_axis, minor_axis, angle, centre_x, centre_y,_,_ = components.split(" ")
-        major_axis = float(major_axis)
-        minor_axis = float(minor_axis)
-        angle = float(angle)
-
-        width = 2 * (np.sqrt(np.square(major_axis*np.cos(angle))+np.square(minor_axis*np.sin(angle))))
-        height = 2 * (np.sqrt(np.square(minor_axis*np.cos(angle))+np.square(major_axis*np.sin(angle))))
-        return ",".join([str(0), centre_x, centre_y, str(width), str(height)])
+from matplotlib import pyplot as plt
+import matplotlib.patches as mpatches
+import random as rnd
 
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-class KnnAnchors():
+def load_image(img_path, net_size, LETTER_BOX=0):
 
-    def __init__(self, path_annots, num_anchors):
-        self.annot_file = path_annots
-        self.num_anchors = num_anchors
+	img = Image.open(img_path)
+	img = img.convert('RGB')
+	img_w, img_h = img.size
 
-    def read_annots(self):
-        boxes_wh = []
-        with open(self.annot_file, 'r') as f:
-            for line in f:
-                annotation = line.rstrip().split()
-                for box in annotation[1:]:
-                    boxes_wh.append(np.array(list(map(float, box.split(',')))[-2:]))
-        return np.array(boxes_wh)
+	disp_img = img.copy()
 
-    def kmeans_clustering(self):
-        boxes_wh = self.read_annots()
-        kmeans = KMeans(n_clusters=self.num_anchors, random_state=0).fit(boxes_wh)
-        return kmeans.cluster_centers_
+	if LETTER_BOX:
+		img = letterbox_image(img, net_size)
+	else:
+		img = img.resize(net_size)
 
-# Uncomment for generating YOLO annotation file (run once)
-# dataset = FDDBDataset()
-# dataset.readEllipsefiles()
+	transform = transforms.ToTensor()
+	img = transform(img) # Change to C,H,W format
+	img = img.unsqueeze_(0) # Add batch dimension
 
-# Uncomment for running KMeans Clustering
-# path_to_annot_file = './data/annotations.txt'
-# num_anchors = 9 # for yolo v3
-# knn = KnnAnchors(path_to_annot_file, num_anchors)
-# anchors = knn.kmeans_clustering()
-# anchors = sorted(anchors, key=lambda x:max(x[0],x[1]))
-# print(list(anchors))
+	return img.to(device), disp_img, (img_w, img_h)
+
+
+def load_model(model_path, INFER=1):
+
+	print('Loading pretrained model...')
+	model = torch.load(model_path)
+
+	if INFER:
+		model.to(device).eval()
+	else:
+		model.to(device)
+
+	return model
+
+def load_classes(fp):
+
+	classes = {}
+	count = 0
+	with open(fp, 'r') as f:
+		for line in f:
+			cls = line.rstrip()
+			classes[count] = cls
+			count+=1
+
+	return classes, count
+
+
+def plot_predictions(disp_img, boxes, classes):
+
+	plt.style.use('dark_background')
+	fig = plt.figure()
+	ax = plt.subplot()
+	for pred in boxes.keys():
+		R,G,B = rnd.randint(0,255),rnd.randint(0,255),rnd.randint(0,255)
+		for b in boxes[pred]:
+			score, box = b
+			score = round(score.item(),2)
+			rect = mpatches.Rectangle((box[0], box[1]), box[2]-box[0], box[3]-box[1], fill=False, edgecolor='#%02x%02x%02x'%(R,G,B), linewidth=2.0)
+			ax.add_patch(rect)
+			ax.annotate(classes[pred]+' '+str(score),(box[0], box[1]-5))
+	ax.imshow(disp_img)
+	plt.show()

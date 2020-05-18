@@ -38,6 +38,15 @@ print('Dataset load complete...')
 
 model = YOLOv3Net(num_classes,num_anchors).to(device)
 model.train()
+s = 0
+for name,p in model.named_parameters():
+	if p.requires_grad:
+		if 'bn' in name:
+			s+=2*p.numel()
+		else:
+			s+=p.numel()
+		print(name, p.shape)
+print('Total number of learnable params = ', s)
 
 # Loss function
 custom_loss = Yolov3Loss(anchors, num_classes, input_size)
@@ -50,6 +59,7 @@ num_epochs = 100
 for epoch in range(num_epochs):
 	for i, data in enumerate(data_holder):
 		imgs = data['image'].to(device)
+		print(imgs.shape)
 		lbls = data['label'].to(device)
 
 		# forward pass

@@ -1,3 +1,6 @@
 references/**
 data/**
 papers/**
+__pycache__
+logs/*.pt
+logs/*.weights

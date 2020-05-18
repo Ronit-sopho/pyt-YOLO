@@ -15,6 +15,21 @@ import matplotlib.patches as mpatches
 
 MAX_BOXES = 30
 
+def letterbox_image(org_img, size):
+    """
+    Resize image while keeping the aspect ratio same
+    """
+    img_w, img_h = org_img.size
+    w, h = size
+    scaling_factor = min(w/img_w, h/img_h)
+    new_w = int(scaling_factor*img_w)
+    new_h = int(scaling_factor*img_h)
+
+    org_img = org_img.resize((new_w, new_h), Image.LINEAR)
+    resized_img = Image.new('RGB', size, (128,128,128))
+    resized_img.paste(org_img, ((w-new_w)//2, (h-new_h)//2))
+    return resized_img
+
 def YoloLabel(labels, input_shape, anchors, num_classes, batch_size):
     """
     Current implementation is really slow :(

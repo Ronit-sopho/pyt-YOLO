@@ -35,17 +35,16 @@ def get_bounding_boxes(yolo_output, net_size, img_size):
 	class_probs = yolo_output[...,5:]
 	box_scores = obj_scores*class_probs
 	boxed = [xx1.flatten(), yy1.flatten(), xx2.flatten(), yy2.flatten()]
-	boxed = [k.to('cpu') for k in boxed]
-	boxes = torch.tensor(np.transpose(np.stack(boxed)))
+	boxes = torch.transpose(torch.stack(boxed),0,1)
 
-	return boxes, box_scores.flatten().to('cpu'), obj_scores.flatten().to('cpu')
+	return boxes, box_scores.flatten(), obj_scores.flatten()
 
 
 
 def main():
 
 	parser = argparse.ArgumentParser()
-	parser.add_argument("--image", help="path to image", default='./data/testimages/lena.png')
+	parser.add_argument("--image", help="path to image", default='./data/test_data/lena.png')
 	parser.add_argument("--conf_thresh", help="confidence of boxes", type=float, default=0.7)
 	parser.add_argument("--nms_thresh", help="perform NMS with this threshold", type=float, default=0.5)
 	parser.add_argument("--model", help="path to .pt file", default='./logs/yolov3.pt')
@@ -89,16 +88,21 @@ def main():
 		all_boxes_scores = torch.cat(all_boxes_scores)
 		all_boxes_conf_scores = torch.cat(all_boxes_conf_scores)
 		new_boxes = {}
-		
-		for i in range(num_classes):
-			if(max(all_boxes_scores[:,i])>args.conf_thresh):
-				new_boxes[i] = []
-				bxs = all_boxes[all_boxes_conf_scores>0.3]
-				bxs_sc = all_boxes_scores[:,i][all_boxes_conf_scores>0.3]
-				keep = nms(bxs, bxs_sc , args.nms_thresh)
-				for j in range(len(keep)):
-					new_boxes[i].append((bxs_sc[keep[j]],bxs[keep[j]]))
 
+		bxs = all_boxes[all_boxes_conf_scores>0.7]
+		bxs_sc = all_boxes_scores[all_boxes_conf_scores>0.7]
+		all_boxes_conf_scores = all_boxes_conf_scores[all_boxes_conf_scores>0.7]
+
+		for i in range(num_classes):
+			if(max(bxs_sc[:,i])>args.conf_thresh):
+				new_boxes[i] = []
+				keep = nms(bxs, bxs_sc[:,i], args.nms_thresh)
+				for j in range(len(keep)):
+					if(bxs_sc[:,i][keep[j]]>args.conf_thresh):
+						new_boxes[i].append((bxs_sc[:,i][keep[j]],bxs[keep[j]]))
+
+	print('Found...')
+	print(new_boxes)
 	plot_predictions(display_image, new_boxes, classes)
 
 if __name__ == '__main__':

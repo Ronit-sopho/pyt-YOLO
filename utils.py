@@ -70,4 +70,5 @@ def plot_predictions(disp_img, boxes, classes):
 			ax.add_patch(rect)
 			ax.annotate(classes[pred]+' '+str(score),(box[0], box[1]-5))
 	ax.imshow(disp_img)
+	plt.axis('off')
 	plt.show()

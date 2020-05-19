@@ -13,6 +13,7 @@ import torch
 
 from experiments.helpers import trackOutput, Concatenate
 from model.netcfg import modelCfg
+import argparse
 
 def cfg_to_dict(path_cfg):
     """
@@ -50,7 +51,7 @@ class FDDBDataset():
     """
 
     def __init__(self):
-        self.annot_dir = './data/FDDB-folds'
+        self.annot_dir = './data/training_data/FDDB-folds'
 
     def readEllipsefiles(self):
         self.annot_write =  open('./data/annotations.txt','a')
@@ -227,9 +228,6 @@ class ConvertWeights():
                 prev_layer_shape = (None, None, filters)
                 model_layers.extend([nn.Sequential(*layers)])
                 print(weights.shape)
-                # count+=1
-                # if count==3:
-                #     break
 
             elif layer.startswith('shortcut'):
                 # Read parameters
@@ -273,17 +271,39 @@ class ConvertWeights():
         torch.save(YOLOv3model, './logs/yolov3.pt')
 
 
-# Uncomment for generating YOLO annotation file (run once)
-# dataset = FDDBDataset()
-# dataset.readEllipsefiles()
 
-# Uncomment for running KMeans Clustering
-# path_to_annot_file = './data/annotations.txt'
-# num_anchors = 9 # for yolo v3
-# knn = KnnAnchors(path_to_annot_file, num_anchors)
-# anchors = knn.kmeans_clustering()
-# anchors = sorted(anchors, key=lambda x:max(x[0],x[1]))
-# print(list(anchors))
+def main():
 
-cv = ConvertWeights('./logs/yolov3.weights', './refs/yolov3.cfg')
-cv.save_weights()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--gen_anchors", help="generate bounding box priors using k-means clustering", action="store_true")
+    parser.add_argument("--gen_annotations", help="generate yolo annotations from training data lables", action="store_true", nargs='+')
+    parser.add_argument("--convert", help="convert darknet weights to pytorch format", nargs='+')
+
+    args = parser.parse_args()
+
+    if args.gen_anchors:
+        path_to_annot_file = args.gen_anchors[0]
+        num_anchors = args.gen_anchors[1]
+        print('Generating {} anchors from {}'.format(num_anchors, path_to_annot_file))
+        knn = KnnAnchors(path_to_annot_file, num_anchors)
+        anchors = knn.kmeans_clustering()
+        anchors = sorted(anchors, key=lambda x: max(x[0],x[1]))
+        print(list(anchors))
+
+    else if args.gen_annotations:
+        # This is specific to FDDB face dataset
+        dataset = FDDBDataset()
+        dataset.readEllipsefiles()
+
+    else if args.convert:
+        path_to_weights = args.convert[1]
+        path_to_cfg = args.convert[0]
+        cv = ConvertWeights(path_to_weights, path_to_cfg)
+        cv.save_weights()
+
+    else if:
+        print('No argument found :(')
+
+
+if __name__ == '__main__':
+    main()

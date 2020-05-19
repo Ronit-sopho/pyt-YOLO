@@ -19,7 +19,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # Read relevant files
 annotation_file = './data/annotations.txt'
-image_dir = './data/images/originalPics'
+image_dir = './data/training_data/images/originalPics'
 # Hard code anchors for now
 anchors = [30,43, 60,88, 78,116, 98,148, 124,186, 154,232, 187,280, 222,335, 285,416]
 num_anchors = len(anchors)//2

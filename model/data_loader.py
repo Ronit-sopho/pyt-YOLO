@@ -169,9 +169,9 @@ class FaceDataset(Dataset):
 #---------------Uncomment to plot sample data from the dataset--------------------------
 #
 # annotFile = '../data/annotations.txt'
-# imageDir = '../data/images/originalPics'
+# imageDir = '../data/training_data/images/originalPics'
 # anchors = [10,13, 16,30, 33,23, 30,61, 62,45, 59,119, 116,90, 156,198, 373,326]
-#
+
 # trans = transforms.Compose([transforms.ToTensor()])
 # start = time.time()
 # dataset= FaceDataset(annotFile, imageDir, transform=None, resize=(416,416))
@@ -180,14 +180,14 @@ class FaceDataset(Dataset):
 # print('Time taken for loading dataset: ',end-start)
 # plt.style.use('dark_background')
 # fig = plt.figure()
-#
+
 # for i,data in enumerate(dataHolder):
 #     bs = data['image'].shape[0]
 #     # print('Batch size: {}'.format(bs))
 #     imgs = data['image']
 #     labels = data['label']
 #     start = time.time()
-#     yoloBoxes = YoloLabel(labels, (416,416), anchors, 1)
+#     yoloBoxes = YoloLabel(labels, (416,416), anchors, 1, 32)
 #     end = time.time()
 #     print('Time taken for conversion: ', end-start)
 #     for j in range(bs):

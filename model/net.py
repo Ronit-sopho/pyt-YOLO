@@ -13,6 +13,7 @@ import torch.nn.functional as F
 from torchviz import make_dot
 import torch
 import numpy as np
+
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 class _residualBlocks_(nn.Module):

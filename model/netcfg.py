@@ -30,5 +30,7 @@ class modelCfg(nn.Module):
                 self.module_outputs.append(x)
             elif l==None:
                 self.module_outputs.append(x)
-            
-        return [self.module_outputs[o].permute([0,2,3,1]) for o in self.yolo_outputs]
+        
+        yolo_out = [self.module_outputs[o].permute([0,2,3,1]) for o in self.yolo_outputs]
+        self.module_outputs = []
+        return yolo_out

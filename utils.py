@@ -37,6 +37,7 @@ def load_model(model_path, INFER=1):
 	model = torch.load(model_path)
 
 	if INFER:
+		print('For inference')
 		model.to(device).eval()
 	else:
 		model.to(device)
@@ -56,7 +57,7 @@ def load_classes(fp):
 	return classes, count
 
 
-def plot_predictions(disp_img, boxes, classes):
+def plot_predictions(disp_img, boxes, classes, f_name):
 
 	plt.style.use('dark_background')
 	fig = plt.figure()
@@ -71,4 +72,5 @@ def plot_predictions(disp_img, boxes, classes):
 			ax.annotate(classes[pred]+' '+str(score),(box[0], box[1]-5))
 	ax.imshow(disp_img)
 	plt.axis('off')
-	plt.show()
+	plt.savefig("./data/test_data/out/"+f_name)
+	# plt.show()
